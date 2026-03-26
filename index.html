@@ -184,7 +184,13 @@
     <ul id="taskList"></ul>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
+    const SUPABASE_URL = 'https://ogszrpyjpanwpzsciyxw.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9nc3pycHlqcGFud3B6c2NpeXh3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0OTY1NTAsImV4cCI6MjA5MDA3MjU1MH0.l_6g94uKcV28JXa95DICc2xfG1XguR0zZYar3TQaIRg';
+    const { createClient } = supabase;
+    const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
     const taskInput = document.getElementById('taskInput');
     const addBtn = document.getElementById('addBtn');
     const taskList = document.getElementById('taskList');
@@ -192,17 +198,14 @@
 
     let tasks = [];
 
-    function loadTasks() {
-      try {
-        const saved = localStorage.getItem('tasks');
-        tasks = saved ? JSON.parse(saved) : [];
-      } catch {
-        tasks = [];
-      }
-    }
-
-    function saveTasks() {
-      localStorage.setItem('tasks', JSON.stringify(tasks));
+    async function loadTasks() {
+      const { data, error } = await db
+        .from('working_list')
+        .select('*')
+        .order('created_at', { ascending: true });
+      if (error) { console.error(error); return; }
+      tasks = data;
+      renderTasks();
     }
 
     function renderTasks() {
@@ -225,7 +228,7 @@
         checkbox.type = 'checkbox';
         checkbox.className = 'task-checkbox';
         checkbox.checked = task.done;
-        checkbox.addEventListener('change', () => toggleTask(task.id));
+        checkbox.addEventListener('change', () => toggleTask(task.id, !task.done));
 
         const span = document.createElement('span');
         span.className = 'task-text';
@@ -244,31 +247,43 @@
       });
     }
 
-    function addTask() {
+    async function addTask() {
       const text = taskInput.value.trim();
-      if (!text) {
-        taskInput.focus();
-        return;
-      }
-      tasks.push({ id: Date.now(), text, done: false });
-      saveTasks();
+      if (!text) { taskInput.focus(); return; }
+
+      addBtn.disabled = true;
+      const { data, error } = await db
+        .from('working_list')
+        .insert({ text, done: false })
+        .select()
+        .single();
+      addBtn.disabled = false;
+
+      if (error) { console.error(error); return; }
+      tasks.push(data);
       renderTasks();
       taskInput.value = '';
       taskInput.focus();
     }
 
-    function toggleTask(id) {
+    async function toggleTask(id, done) {
+      const { error } = await db
+        .from('working_list')
+        .update({ done })
+        .eq('id', id);
+      if (error) { console.error(error); return; }
       const task = tasks.find(t => t.id === id);
-      if (task) {
-        task.done = !task.done;
-        saveTasks();
-        renderTasks();
-      }
+      if (task) task.done = done;
+      renderTasks();
     }
 
-    function deleteTask(id) {
+    async function deleteTask(id) {
+      const { error } = await db
+        .from('working_list')
+        .delete()
+        .eq('id', id);
+      if (error) { console.error(error); return; }
       tasks = tasks.filter(t => t.id !== id);
-      saveTasks();
       renderTasks();
     }
 
@@ -278,7 +293,6 @@
     });
 
     loadTasks();
-    renderTasks();
   </script>
 </body>
 </html>
